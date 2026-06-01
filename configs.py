@@ -13,7 +13,7 @@ USER_SESSION = os.getenv("USER_SESSION", "") # Use Pyrogram V2 String Session
 
 # Web
 PORT = int(os.getenv("PORT", "8080")) 
-URL = os.getenv("URL", "") # Heroku or Koyeb Or Render Base Url 
+URL = os.getenv("URL", "https://web-production-c02fb5.up.railway.app/") # Heroku or Koyeb Or Render Base Url 
 
 # MongoDB
 DATABASE_URL = os.getenv("DATABASE_URL", "") #Mongodb Url 
