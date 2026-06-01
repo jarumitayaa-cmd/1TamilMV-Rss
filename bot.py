@@ -1,11 +1,10 @@
-import asyncio, threading, time, requests
-from aiohttp import web
+import asyncio
+from aiohttp import web, ClientSession
 from pyrogram import Client, idle
-# CHANGE: Imported BOT_TOKEN instead of USER_SESSION
 from configs import API_ID, API_HASH, BOT_TOKEN, PORT, URL, SCRAPE_INTERVAL, PING_INTERVAL
 from tamilmv import tmv_scraper
 
-# CHANGE: Initialized as a Bot Account with in_memory=True to bypass file generation
+# Initialize as a Bot Account with in_memory=True to bypass file generation/cache crashes
 User = Client(
     "User", 
     api_id=API_ID, 
@@ -14,23 +13,31 @@ User = Client(
     in_memory=True
 )
 
-# ---------- Keep-alive Ping ----------
-def ping_loop():
-    while True:
-        try:
-            r = requests.get(URL, timeout=30)
-            print("🍁 Ping successful" if r.status_code == 200 else f"👹 Ping failed: {r.status_code}")
-        except Exception as e:
-            print(f"❌ Ping exception: {e}")
-        time.sleep(PING_INTERVAL)
-
-threading.Thread(target=ping_loop, daemon=True).start()
+# ---------- Async Keep-alive Ping ----------
+async def ping_loop():
+    """Asynchronously pings the web server link to keep the container awake."""
+    await asyncio.sleep(10)  # Give the server a few seconds to boot up first
+    async with ClientSession() as session:
+        while True:
+            try:
+                async with session.get(URL, timeout=30) as response:
+                    if response.status == 200:
+                        print("🍁 Ping successful")
+                    else:
+                        print(f"👹 Ping failed: {response.status}")
+            except Exception as e:
+                print(f"❌ Ping exception: {e}")
+            await asyncio.sleep(PING_INTERVAL)
 
 # ---------- TamilMV Scraper Loop ----------
 async def main_loop():
+    """Background task handling the continuous RSS scraping."""
     while True:
         print("🌀 Starting TamilMV scraping...")
-        await tmv_scraper(User)
+        try:
+            await tmv_scraper(User)
+        except Exception as e:
+            print(f"❌ Scraper encountered an error: {e}")
         await asyncio.sleep(SCRAPE_INTERVAL)
 
 # ---------- Web server ----------
@@ -47,15 +54,23 @@ async def start_server():
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
+    print(f"🌐 Web server running internally on port {PORT}")
 
 # ---------- Startup ----------
 async def start_bot():
+    # Start Pyrogram Bot
     await User.start()
-    # CHANGE: Adjusted logs to print Bot profile info instead of user profile
     bot_me = await User.get_me()
     print(f"✅ Bot logged in: @{bot_me.username}")
-    asyncio.create_task(main_loop())
+    
+    # Start Web Server
     await start_server()
+    
+    # Register Background Tasks safely inside the asyncio event loop
+    asyncio.create_task(main_loop())
+    asyncio.create_task(ping_loop())
+    
+    # Keep application alive
     await idle()
     await User.stop()
 
