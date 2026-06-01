@@ -17,15 +17,15 @@ URL = os.getenv("URL", "") # Heroku or Koyeb Or Render Base Url
 
 # MongoDB
 DATABASE_URL = os.getenv("DATABASE_URL", "") #Mongodb Url 
-DATABASE_NAME = os.getenv("DATABASE_NAME", "") # example Cluster0
+DATABASE_NAME = os.getenv("DATABASE_NAME", "@Nachannel4") # example Cluster0
 
 # TamilMV settings
-TMV_URL = os.getenv("TMV_URL", "https://www.1tamilmv.land/")
-TMV_TORRENT = int(os.getenv("TMV_TORRENT", ""))
+TMV_URL = os.getenv("TMV_URL", "https://www.1tamilmv.cards/")
+TMV_TORRENT = int(os.getenv("TMV_TORRENT", "-1003919899883"))
 TMV_LEECH_GRP = int(os.getenv("TMV_LEECH_GRP", ""))
 TMV_MIRROR_GRP = int(os.getenv("TMV_MIRROR_GRP", ""))
 TMV_TORRENT_THUMB = os.getenv("TMV_TORRENT_THUMB", "https://i.ibb.co/7dq7mMLp/photo-2025-10-18-16-42-28-7562603128038621216.jpg") #torrant Pic
-BOT_TAG = os.getenv("BOT_TAG", "@SMD_BOTz") # File Prefix
+BOT_TAG = os.getenv("BOT_TAG", "@S95hub") # File Prefix
 
 # Internal
 PING_INTERVAL = int(os.getenv("PING_INTERVAL", "120"))
