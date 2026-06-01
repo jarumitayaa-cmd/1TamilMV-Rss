@@ -34,10 +34,8 @@ def fix_url(href: str) -> str:
     return href if href.startswith("http") else urljoin(TMV_URL, href)
 
 def categorize_content(title: str) -> str:
-    """Detects if it's a Movie or Web Series based on title."""
     t = title.lower()
     series_patterns = [r's\d{1,2}', r'ep\s?\d+', r'episode', r'season', r'complete', r'hdrip']
-    
     if any(re.search(p, t) for p in series_patterns) or "web series" in t or "tv show" in t:
         return "Series"
     if "dubbed" in t or "tam+" in t or "multi" in t:
@@ -52,7 +50,16 @@ def download_file(scraper, url: str, filename: str) -> bool:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             return os.path.getsize(filename) > 0
-    except: return False
+    except: 
+        return False
+    return False
+
+def fetch_page(scraper, url):
+    """Synchronous page fetcher for background worker execution."""
+    try:
+        return scraper.get(url, timeout=30)
+    except:
+        return None
 
 # ================= Telegram Upload =================
 async def send_torrent(user: Client, file_path, category, file_name, file_url, magnet, size_mb=0):
@@ -70,11 +77,13 @@ async def send_torrent(user: Client, file_path, category, file_name, file_url, m
             if reply_cmd:
                 await user.send_message(chat_id=chat_id, text=reply_cmd, reply_to_message_id=msg.id)
         except Exception as e:
-            print(f"⚠️ Send failed: {e}")
+            print(f"⚠️ Send failed for target chat {chat_id}: {e}")
 
     await safe_send(TMV_TORRENT)
-    await safe_send(TMV_LEECH_GRP, reply_cmd="/qbleech")
-    await safe_send(TMV_MIRROR_GRP, reply_cmd="/qbmirror")
+    if TMV_LEECH_GRP and TMV_LEECH_GRP != 0 and str(TMV_LEECH_GRP) != "0":
+        await safe_send(TMV_LEECH_GRP, reply_cmd="/qbleech")
+    if TMV_MIRROR_GRP and TMV_MIRROR_GRP != 0 and str(TMV_MIRROR_GRP) != "0":
+        await safe_send(TMV_MIRROR_GRP, reply_cmd="/qbmirror")
     await add_tmv(file_name, file_url, magnet, size_mb)
 
 # ================= TamilMV Scraper =================
@@ -83,15 +92,25 @@ async def tmv_scraper(user: Client):
     print("🔍 Scraping TamilMV...")
 
     try:
-        resp = scraper.get(TMV_URL, timeout=30)
+        # Offload cloudscraper main fetch to background thread safely
+        resp = await asyncio.to_thread(fetch_page, scraper, TMV_URL)
+        if not resp or resp.status_code != 200:
+            print("❌ Failed to parse TamilMV main page. Might be blocked by Cloudflare.")
+            return
+
         soup = BeautifulSoup(resp.text, "html.parser")
         topics = [fix_url(a["href"]) for a in soup.find_all("a", href=True) if "topic" in a["href"]][:40]
+        print(f"📌 Found {len(topics)} topic pages to examine.")
         
         for topic_url in topics:
-            await asyncio.sleep(random.uniform(2, 4))
+            await asyncio.sleep(random.uniform(1.5, 3))
             try:
-                topic_html = scraper.get(topic_url, timeout=30).text
-                topic_soup = BeautifulSoup(topic_html, "html.parser")
+                # Offload individual topics fetch to background thread
+                topic_resp = await asyncio.to_thread(fetch_page, scraper, topic_url)
+                if not topic_resp or topic_resp.status_code != 200:
+                    continue
+                
+                topic_soup = BeautifulSoup(topic_resp.text, "html.parser")
                 posts = topic_soup.find_all("div", class_="cPost_contentWrap")
                 
                 for post in posts:
@@ -118,11 +137,15 @@ async def tmv_scraper(user: Client):
 
                         category = categorize_content(link_text)
                         filename = clean_filename(link_text)
+                        
                         if await asyncio.to_thread(download_file, scraper, href, filename):
-                            print(f"✅ [{category}] Found: {link_text}")
+                            print(f"✅ [{category}] Processing: {link_text}")
                             await send_torrent(user, filename, category, link_text, href, href, size_mb)
-                            if os.path.exists(filename): os.remove(filename)
+                            if os.path.exists(filename): 
+                                os.remove(filename)
 
-            except: continue
+            except Exception as e:
+                print(f"⚠️ Error parsing target topic link: {e}")
+                continue
     except Exception as e:
-        print(f"🛑 Error: {e}")
+        print(f"🛑 Scraper Engine Crash: {e}")
